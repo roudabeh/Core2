@@ -1,6 +1,8 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Tamrin.APIModels;
+using Tamrin.Database;
+using Tamrin.Database.Models;
 
 namespace Tamrin.Controllers
 {
@@ -8,44 +10,71 @@ namespace Tamrin.Controllers
     [ApiController]
     public class ContactsController : ControllerBase
     {
-        static List<Contact> contacts = new List<Contact>();
-       public ContactsController() { }
+        //static List<Contact> contacts = new List<Contact>();
+        private readonly TamrinDBContext db;
 
+       public ContactsController(TamrinDBContext tamrinDBContext) {
+            db = tamrinDBContext;
+        }
 
         [HttpGet]
-        public IEnumerable<Contact> GetAll()
+        public IEnumerable<ContactAPIModel> GetAll()
         {
-            return contacts;
+            return db.Contacts.Select(c => new ContactAPIModel
+            {
+                Id = c.Id,
+                Name = c.Name,
+                Number = c.Number,
+                Addresses = c.Addresses.Select(x=> x.Address).ToList(),
+                Factors = c.Factors.Select(f=> f.Title).ToList()
+            });
         }
 
         [HttpPost]
-        public bool Add(Contact contact)
+        public bool Add(ContactAPIModel contact)
         {
-            contacts.Add(contact);
+            db.Contacts.Add(new Contact
+            {
+                Name = contact.Name,
+                Number = contact.Number,
+                Addresses = contact.Addresses.Select(c=> new ContactAddress
+                {
+                    Address = c
+                }).ToList()
+            });
+            db.SaveChanges();
             return true;
         }
 
         [HttpPost]
-        public bool Edit(Contact contact)
+        public bool Edit(ContactAPIModel contact)
         {
-            if (contacts.Select(c => c.Id).Contains(contact.Id))
+            var dbContact = db.Contacts.Where(c => c.Id == contact.Id).FirstOrDefault();
+            if (dbContact == null)
+                throw new Exception("Contact not found");
+
+            dbContact.Name = contact.Name;
+            dbContact.Number = contact.Number;
+            dbContact.Addresses = contact.Addresses.Select(c => new ContactAddress
             {
-                contacts.Where(c => c.Id == contact.Id).Select( s => { s.Name = contact.Name; s.Number = contact.Number; return s; }).ToList();  
-                return true;
-            }
-            return false;
+                Address = c
+            });
+
+            db.SaveChanges();
+            return true;
 
         }
 
         [HttpPost]
         public bool Delete(int id)
         {
-            if (contacts.Select(c => c.Id).Contains(id))
-            {
-                contacts.Remove(contacts.Where(c => c.Id == id).FirstOrDefault());
-                return true;
-            }
-            return false;
+            var dbContact = db.Contacts.Where(c => c.Id == id).FirstOrDefault();
+            if (dbContact == null)
+                throw new Exception("Contact not found");
+
+            db.Contacts.Remove(dbContact);
+            db.SaveChanges();
+            return true;
 
         }
     }
